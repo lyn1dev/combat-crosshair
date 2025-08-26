@@ -32,16 +32,21 @@ public abstract class HitBoxRenderMixin {
     @Unique private static MatrixStack matrices;
     @Unique private static Entity entity;
     @Unique private static VertexConsumerProvider verticeProvider;
-    @Inject(method = "render(Lnet/minecraft/entity/Entity;DDDFLnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider;ILnet/minecraft/client/render/entity/EntityRenderer;)V", at = @At(value = "INVOKE", target = "Lnet/minecraft/client/render/entity/EntityRenderer;render(Lnet/minecraft/client/render/entity/state/EntityRenderState;Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider;I)V", shift = At.Shift.AFTER))
-    private void captureArgs(Entity entity, double x, double y, double z, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, EntityRenderer<? super Entity, EntityRenderState> renderer, CallbackInfo ci) {
+
+    // Updated to match the new 1.21.8 render method signature
+    @Inject(method = "render(Lnet/minecraft/entity/Entity;DDDFLnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumerProvider;I)V", 
+            at = @At("HEAD"))
+    private void captureArgs(Entity entity, double x, double y, double z, float tickDelta, MatrixStack matrices, VertexConsumerProvider vertexConsumers, int light, CallbackInfo ci) {
         HitBoxRenderMixin.tickDelta = tickDelta;
         HitBoxRenderMixin.matrices = matrices;
         HitBoxRenderMixin.entity = entity;
         HitBoxRenderMixin.verticeProvider = vertexConsumers;
     }
 
-    @Inject(method = "renderHitbox", at = @At("HEAD"), cancellable = true)
-    private static void hitBoxHook(CallbackInfo ci) {
+    // Updated to target the new renderHitbox method signature
+    @Inject(method = "renderHitbox(Lnet/minecraft/client/util/math/MatrixStack;Lnet/minecraft/client/render/VertexConsumer;Lnet/minecraft/client/render/entity/state/EntityHitbox;)V", 
+            at = @At("HEAD"), cancellable = true)
+    private static void hitBoxHook(MatrixStack matrices, VertexConsumer vertexConsumer, CallbackInfo ci) {
         Config config = Config.getInstance();
         ci.cancel();
 
@@ -66,10 +71,7 @@ public abstract class HitBoxRenderMixin {
 
         Main.lineWidth = Main.mc.player != null && Main.mc.player.distanceTo(entity) > config.distFor2 ? config.line2 : config.line1;
 
-
         VertexConsumerProvider.Immediate imm = Main.mc.getBufferBuilders().getEntityVertexConsumers();
-
-
 
         renderBox(matrices,
                 vertices,
@@ -85,8 +87,6 @@ public abstract class HitBoxRenderMixin {
                 config.renderEyeHeight,
                 config.renderLookDir);
 
-
-
         GL11.glEnable(GL11.GL_LINE_SMOOTH);
 
         imm.draw();
@@ -94,8 +94,8 @@ public abstract class HitBoxRenderMixin {
         GL11.glDisable(GL11.GL_LINE_SMOOTH);
 
         Main.lineWidth = Main.getVanillaWidth();
-
     }
+
     @Unique
     private static void renderBox(MatrixStack matrices, VertexConsumer vertices, Entity entity, float tickDelta, Color eyeHeight, Color lookDir, Color main, Color ifTarget, Color ifHurt, boolean targetCol, boolean hurtCol, boolean renderEyeHeight, boolean renderLookDir) {
         Box box = entity.getBoundingBox().offset(-entity.getX(), -entity.getY(), -entity.getZ());
@@ -103,21 +103,13 @@ public abstract class HitBoxRenderMixin {
         Color outer = entity instanceof LivingEntity le && le.hurtTime != 0 && hurtCol ? ifHurt : (targetCol && Main.mc.crosshairTarget instanceof EntityHitResult ehr && ehr.getEntity() == entity ? ifTarget : main);
         VertexRendering.drawBox(matrices, vertices, box, outer.getRed() / 255f, outer.getGreen() / 255f, outer.getBlue() / 255f, outer.getAlpha() / 255f);
 
-
         renderDragon(entity, matrices, tickDelta, vertices);
-
 
         if (entity instanceof LivingEntity && renderEyeHeight) {
             float j = 0.01f;
             VertexRendering.drawBox(matrices, vertices, box.minX, entity.getStandingEyeHeight() - j, box.minZ, box.maxX, entity.getStandingEyeHeight() + j, box.maxZ, eyeHeight.getRed() / 255f, eyeHeight.getGreen() / 255f, eyeHeight.getBlue() / 255f, eyeHeight.getAlpha() / 255f);
         }
-        /*Entity entity2;
-        if ((entity2 = entity.getVehicle()) != null) {
-            float k = Math.min(entity2.getWidth(), entity.getWidth()) / 2.0f;
-            float l = 0.0625f;
-            Vec3d vec3d = entity2.getPassengerRidingPos(entity).subtract(entity.getPos());
-            VertexRendering.drawBox(matrices, vertices, vec3d.x - (double)k, vec3d.y, vec3d.z - (double)k, vec3d.x + (double)k, vec3d.y + l, vec3d.z + (double)k, 1.0f, 1.0f, 0.0f, 1.0f);
-        }*/
+
         if (renderLookDir) {
             Vec3d vec3d2 = entity.getRotationVec(tickDelta);
             Matrix4f matrix4f = matrices.peek().getPositionMatrix();
